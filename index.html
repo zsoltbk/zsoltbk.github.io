@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>Babylon Template</title>
+<style>
+html, body {
+overflow: hidden;
+width: 100%;
+height: 100%;
+margin: 0;
+padding: 0;
+}
+#renderCanvas {
+width: 100%;
+height: 100%;
+touch-action: none;
+}
+</style>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+<script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+</head>
+<body>
+  <canvas id="renderCanvas" touch-action="none"></canvas>
+  <script>
+        const canvas = document.getElementById("renderCanvas"); // Get the canvas element
+        const engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
+        // Add your code here matching the playground format
+        // Register a render loop to repeatedly render the scene
+        
+        var treeSize = 8;
+        var bushSize = 5;
+        var foliageSize = 5;
+        var humanSize = 4;
+        var colorSteps = [0.0, 0.2, 0.4, 0.6, 0.8];
+        
+        var objects = {};
+        
+		var xobj = new XMLHttpRequest();
+		xobj.overrideMimeType("application/json");
+		xobj.open('GET', 'objects3.json?' + ((new Date()).getTime()), true); // Replace 'my_data' with the path to your file
+		xobj.onreadystatechange = function () {
+		if (xobj.readyState == 4 && xobj.status == "200") {
+			// Required use of an anonymous callback as .open will NOT return a value but simply returns undefined in asynchronous mode
+			objects = JSON.parse(xobj.responseText);
+
+			const createScene = function () {
+				const scene = new BABYLON.Scene(engine);
+				
+				const skyTexture = new BABYLON.EquiRectangularCubeTexture("sky.jpg", scene, 512);
+
+				const camera = new BABYLON.ArcRotateCamera("camera", 0, 1.22, 200, new BABYLON.Vector3(200, 0, 200), scene);
+				camera.noRotationConstraint = true;
+				var prevCameraX = camera.getTarget()._x;
+				var prevCameraZ = camera.getTarget()._z;
+				camera.fov = 0.4;
+				camera.upperBetaLimit = 1.22;
+				camera.lowerBetaLimit = 0.3;
+				camera.lowerRadiusLimit = 50;
+				camera.upperRadiusLimit = 1000;
+				camera.wheelPrecision = 2;
+				camera.attachControl(canvas, true);
+				camera._panningMouseButton = 2;
+				camera.inputs.attached.pointers.buttons = [1,2];
+				camera.panningAxis = new BABYLON.Vector3(10, 0, 10);
+				
+				var grass = new BABYLON.StandardMaterial("grassmat", scene);
+				grass.diffuseTexture = new BABYLON.Texture("map/grass/grassmat.jpg", scene);
+				grass.diffuseTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				grass.diffuseTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				grass.bumpTexture = new BABYLON.Texture("map/grass/grassmat-nor.jpg", scene);
+				grass.bumpTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				grass.bumpTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				grass.specularTexture = new BABYLON.Texture("map/grass/grassmat-sp.jpg", scene);
+				grass.specularTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				grass.specularTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+				
+				
+				const light = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(0.7, -1, 0.7), scene);
+				light.intensity = 4.0;
+				light.position = new BABYLON.Vector3(-100,40,-100);
+				//light.shadowOrthoScale = 0.2;
+				//light.shadowMinZ = -2000;
+				//light.shadowMaxZ = 2000;
+				//light.autoUpdateExtends = false;
+				const lightdegree = 45;
+				
+				/*var shadowGenerator = new BABYLON.ShadowGenerator(4048, light);
+				
+				shadowGenerator.enableSoftTransparentShadow = false;
+				shadowGenerator.transparencyShadow = true;
+				shadowGenerator.bias = 0.0001;
+				shadowGenerator.usePoissonSampling = true;
+				shadowGenerator.usePercentageCloserFiltering = true;
+				shadowGenerator.darkness = 0.1;
+				shadowGenerator.filteringQuality = BABYLON.ShadowGenerator.QUALITY_LOW;*/
+				
+				var shadowGenerator = new BABYLON.CascadedShadowGenerator(2048, light);
+				//shadowGenerator.enableSoftTransparentShadow = false;
+				shadowGenerator.transparencyShadow = true;
+				shadowGenerator.bias = 0.001;
+				//shadowGenerator.usePoissonSampling = true;
+				shadowGenerator.usePercentageCloserFiltering = true;
+				shadowGenerator.darkness = 0.1;
+				shadowGenerator.numCascades = 3;
+				shadowGenerator.lambda = 1.0;
+				shadowGenerator.filteringQuality = BABYLON.ShadowGenerator.QUALITY_LOW;
+				shadowGenerator.cascadeBlendPercentage = 0.05;
+				//shadowGenerator.stabilizeCascades = true;
+				shadowGenerator.shadowMaxZ = 400;
+				shadowGenerator.autoCalcDepthBounds = true;
+				shadowGenerator.autoCalcDepthBoundsRefreshRate = 20;
+				//shadowGenerator.depthClamp = true;
+				
+				// Create tree objects
+				objects.hightrees = objects.trees;
+			
+				objects.hightrees.forEach(function(tree, i) {
+					BABYLON.SceneLoader.LoadAssetContainer("./foliage/", tree.file + ".glb", scene, function (container) {
+						var meshes = container.meshes;
+						var materials = container.materials;
+						var texture = materials[0].albedoTexture;
+						texture.hasAlpha = true;
+						var impomat = new BABYLON.StandardMaterial("impomat", scene);
+						impomat.emissiveTexture = texture;
+						impomat.opacityTexture = texture;
+						impomat.backFaceCulling = true;
+						impomat.disableLighting = true;
+						impomat.useAlphaFromDiffuseTexture = true;
+						impomat.alphaMode = BABYLON.Engine.ALPHA_COMBINE;
+						impomat.transparencyMode = BABYLON.Material.MATERIAL_ALPHATESTANDBLEND;
+						impomat.alpha = 0.8;
+						
+						meshes[0].position = new BABYLON.Vector3(tree.pos.x, tree.pos.y, tree.pos.z);
+						//meshes[0].scaling = new BABYLON.Vector3(-tree.size,tree.size,-tree.size);
+						meshes[0].addRotation(0, BABYLON.Tools.ToRadians(lightdegree), 0);
+						for (var i = 0; i < meshes.length; i++) {
+							if (tree.size) {
+								if ((meshes[i].id).includes('size' + tree.size)) {
+									if ((meshes[i].id).includes('shadow')) {
+										shadowGenerator.getShadowMap().renderList.push(meshes[i]);
+										meshes[i].visibility = 0.0;
+									} else {
+										meshes[i].material = impomat;
+									}
+								} else {
+									meshes[i].visibility = 0.0;
+								}
+							} else {
+								if ((meshes[i].id).includes('shadow')) {
+									shadowGenerator.getShadowMap().renderList.push(meshes[i]);
+									meshes[i].visibility = 0.0;
+								} else {
+									meshes[i].material = impomat;
+								}
+							}
+						}
+						container.addAllToScene();
+					});
+				});
+				
+				
+				var mapItemTypes = {};
+				
+				for (var u = -5; u < 10; u++) {
+					for (var v = -5; v < 10; v++) {
+						const ground = new BABYLON.Mesh("ground" + u + v, scene);
+						
+						ground.renderGroupId = 1;
+						var vertexData = new BABYLON.VertexData();
+						vertexData.positions = [
+							50 * u, 0, 50 * v,
+							50 * (u + 1), 0, 50 * v,
+							50 * (u + 1), 0, 50 * (v + 1),
+							50 * u, 0, 50 * (v + 1)
+						];
+						vertexData.indices = [
+							0,1,2,
+							2,3,0
+						];
+						vertexData.uvs = [
+							0.0, 0.0,
+							1.0, 0.0,
+							1.0, 1.0,
+							0.0, 1.0
+						];
+						vertexData.applyToMesh(ground, 1);
+						
+						var thisgrass = true;
+						
+						objects.mapitems.forEach(function(item, i) {
+							if (item.pos.u == u && item.pos.v == v) {
+								thisgrass = false;
+								if (mapItemTypes[item.folder + '-' + item.dir]) {
+									ground.material = mapItemTypes[item.folder + '-' + item.dir];
+								} else {
+									var cellmat = new BABYLON.StandardMaterial("cellmat", scene);
+									cellmat.diffuseTexture = new BABYLON.Texture("map/"+ item.folder +"/alb-" + item.dir + ".jpg", scene);
+									cellmat.diffuseTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									cellmat.diffuseTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									cellmat.bumpTexture = new BABYLON.Texture("map/"+ item.folder +"/nor-" + item.dir + ".png", scene);
+									cellmat.bumpTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									cellmat.bumpTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									cellmat.specularTexture = new BABYLON.Texture("map/"+ item.folder +"/sp-" + item.dir + ".jpg", scene);
+									cellmat.specularTexture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									cellmat.specularTexture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+									mapItemTypes[item.folder + '-' + item.dir] = cellmat;
+									ground.material = mapItemTypes[item.folder + '-' + item.dir];
+								}
+							}
+						});
+						
+						if (thisgrass) {
+							ground.material = grass;
+						}
+						ground.receiveShadows = true;
+					}
+				}
+				
+				var clerks = [
+					'human1',
+					'human2',
+					'human3',
+					'human4',
+					'human5',
+					'human6',
+					'human7',
+					'human8',
+					'human9',
+					'human10'
+				]
+				
+				var workers = [
+					'human11',
+					'human12',
+					'human13',
+					'human14'
+				];
+				var persons = clerks.concat(workers);
+				
+				var carContainers = {};
+				var carMats = {};
+				
+				function addCar(car) {
+					if (carContainers[car.file]) {
+						plopCar(carContainers[car.file], car);
+					}
+				}
+				function plopCar(container, car) {
+					var meshes = container.meshes;
+					var materials = container.materials;
+					for (var i = 0; i < materials.length; i++) {
+						let material = materials[i];
+						material.backFaceCulling = true;
+					}
+					
+					for (var i = 0; i < meshes.length; i++) {
+						if (car.color && i != car.color) {
+							meshes[i].isVisible = false;
+						} else {
+							meshes[i].isVisible = true;
+							
+							if (meshes[i].material) {
+								if (car.parking) {
+									if (!carMats['parking-' + car.file + i]) {
+										var parkingMat = meshes[i].material.clone();
+										parkingMat.reflectionTexture = skyTexture;
+										parkingMat.emissiveIntensity = 0.0;
+										carMats['parking-' + car.file + i] = parkingMat;
+									}
+									meshes[i].material = carMats['parking-' + car.file + i];
+								} else {
+									if (!carMats['lighted-' + car.file + i]) {
+										var lightedMat = meshes[i].material.clone();
+										lightedMat.reflectionTexture = skyTexture;
+										lightedMat.emissiveIntensity = 1.0;
+										carMats['lighted-' + car.file + i] = lightedMat;
+									}
+									meshes[i].material = carMats['lighted-' + car.file + i];
+								}
+							}
+						}
+						meshes[i].renderGroupId = 4;
+					}
+					
+					var entries = container.instantiateModelsToScene();
+
+					for (var node of entries.rootNodes) {
+						node.position = new BABYLON.Vector3(car.pos.x, car.pos.y, car.pos.z);
+						node.rotation = new BABYLON.Vector3(0, BABYLON.Tools.ToRadians(180), 0);
+						node.addRotation(0, BABYLON.Tools.ToRadians(car.dir), 0);
+						shadowGenerator.addShadowCaster(node, true);
+					}
+					car.entries = entries;
+				}
+				
+				var carTypes = [
+					'bmw',
+					'audi',
+					'honda1',
+					'honda2'
+				];
+				var busTypes = [
+					'bus1',
+					'bus2'
+				];
+				var vanTypes = [
+					'van'
+				];
+				var truckTypes = [
+					'truck1',
+					'truck2'
+				];
+				var colors = [
+					1, // white
+					2, // grey
+					3, // black or green
+					4, // blue
+					5 // red
+				];
+				var carAnimations = {};
+				
+				(carTypes.concat(busTypes, vanTypes, truckTypes)).forEach(async function(carFile) {
+					await BABYLON.SceneLoader.LoadAssetContainer("./cars/", carFile + ".glb", scene, function (container) {
+						carContainers[carFile] = container;
+						objects.cars.forEach(function(car) {
+							if (carFile == car.file) {
+								plopCar(container, car);
+							}
+						});
+					});
+				});
+				
+				objects.trees = [];
+				
+				objects.trees.forEach(function(tree, i) {
+					var width = 180;
+					var height = 360;
+					if (tree.type == 'long') {
+						width = 90;
+						height = 720;
+					} else if (tree.type == 'medium') {
+						width = 135;
+						height = 540;
+					}
+					
+					tree.sm = new BABYLON.SpriteManager("tree" + i + "sm", "./trees/" + tree.file + ".png", 1, {width: width, height: height});
+					tree.sm.disableDepthWrite = false;
+					tree.sm.cellWidth = width;
+					tree.sp = new BABYLON.Sprite("tree" + i + "sp", tree.sm);
+					tree.sp.position = new BABYLON.Vector3(tree.pos.x, tree.pos.y, tree.pos.z);
+					tree.sp.cellIndex = 0;
+					tree.sp.width = treeSize * tree.size;
+					tree.sp.height = (treeSize * 2) * tree.size;
+					tree.sp.renderGroupId = 4;
+					if (tree.type == 'long') {
+						tree.sm.blendMode = BABYLON.Constants.ALPHA_COMBINE;
+						tree.sp.width = treeSize * tree.size * 0.5;
+						tree.sp.height = (treeSize * 4) * tree.size;
+						tree.sh = BABYLON.MeshBuilder.CreatePlane("tree" + i + "sh", {height: (treeSize * 4) * tree.size * Math.sqrt(2), width: treeSize * tree.size * 0.5}, scene);
+					} else if (tree.type == 'medium') {
+						tree.sm.blendMode = BABYLON.Constants.ALPHA_PREMULTIPLIED_PORTERDUFF;
+						tree.sp.width = treeSize * tree.size * 0.75;
+						tree.sp.height = (treeSize * 3) * tree.size;
+						tree.sh = BABYLON.MeshBuilder.CreatePlane("tree" + i + "sh", {height: (treeSize * 3) * tree.size * Math.sqrt(2), width: treeSize * tree.size * 0.75}, scene);
+					} else {
+						tree.sm.blendMode = BABYLON.Constants.ALPHA_PREMULTIPLIED_PORTERDUFF;
+						tree.sh = BABYLON.MeshBuilder.CreatePlane("tree" + i + "sh", {height: (treeSize * 2) * tree.size * Math.sqrt(2), width: treeSize * tree.size}, scene);
+					}
+					tree.sp.isPickable = true;
+					tree.sh.position = new BABYLON.Vector3(tree.pos.x - (treeSize * 0.7), tree.pos.y + treeSize, tree.pos.z - (treeSize * 0.7));
+					tree.sh.addRotation(0, BABYLON.Tools.ToRadians(lightdegree), 0);
+					tree.sh.renderGroupId = 4;
+					tree.shmat = new BABYLON.StandardMaterial("tree" + i + "shmat", scene);
+					tree.shmat.diffuseTexture = new BABYLON.Texture("./trees/" + tree.file + "-sh.png", scene);
+					tree.shmat.diffuseTexture.hasAlpha = true;
+					tree.shmat.transparencyMode = BABYLON.Material.MATERIAL_ALPHATESTANDBLEND;
+					tree.shmat.useAlphaFromDiffuseTexture = true;
+					tree.sh.material = tree.shmat;
+					tree.sh.visibility = 0.0;
+					shadowGenerator.getShadowMap().renderList.push(tree.sh);
+				});
+				
+				//var postProcess = new BABYLON.FxaaPostProcess("fxaa", 1.0,  camera);
+				//postProcess.samples = 2;
+				
+				scene.onKeyboardObservable.add((kbInfo) => {
+					switch (kbInfo.type) {
+						case BABYLON.KeyboardEventTypes.KEYDOWN:
+							//console.log("KEY DOWN: ", kbInfo.event.key);
+							switch (kbInfo.event.key) {
+								case 'a':
+									//camera.setTarget(new BABYLON.Vector3(camera.target._x - 0.1, camera.target._y, camera.target._z));
+									//camera.setPosition(new BABYLON.Vector3(camera.position._x - 0.1, camera.position._y, camera.position._z));
+									camera.target = new BABYLON.Vector3(camera.target._x - 0.1, camera.target._y, camera.target._z);
+									camera.position = new BABYLON.Vector3(camera.position._x - 0.1, camera.position._y, camera.position._z);
+									break;
+								case 'd':
+									//camera.setTarget(new BABYLON.Vector3(camera.target._x + 0.1, camera.target._y, camera.target._z));
+									//camera.setPosition(new BABYLON.Vector3(camera.position._x + 0.1, camera.position._y, camera.position._z));
+									camera.target = new BABYLON.Vector3(camera.target._x + 0.1, camera.target._y, camera.target._z);
+									camera.position = new BABYLON.Vector3(camera.position._x + 0.1, camera.position._y, camera.position._z);
+									break;
+								case 's':
+									//camera.setTarget(new BABYLON.Vector3(camera.target._x, camera.target._y, camera.target._z - 0.1));
+									//camera.setPosition(new BABYLON.Vector3(camera.position._x, camera.position._y, camera.position._z - 0.1));
+									camera.target = new BABYLON.Vector3(camera.target._x, camera.target._y, camera.target._z - 0.1);
+									camera.position = new BABYLON.Vector3(camera.position._x, camera.position._y, camera.position._z - 0.1);
+									break;
+								case 'w':
+									//camera.setTarget(new BABYLON.Vector3(camera.target._x, camera.target._y, camera.target._z + 0.1));
+									//camera.setPosition(new BABYLON.Vector3(camera.position._x, camera.position._y, camera.position._z + 0.1));
+									camera.target = new BABYLON.Vector3(camera.target._x, camera.target._y, camera.target._z + 0.1);
+									camera.position = new BABYLON.Vector3(camera.position._x, camera.position._y, camera.position._z + 0.1);
+									break;
+							}
+							break;
+						case BABYLON.KeyboardEventTypes.KEYUP:
+							//console.log("KEY UP: ", kbInfo.event.keyCode);
+							break;
+					}
+				});
+				
+				camera.onViewMatrixChangedObservable.add(function() {
+					var oSc = 5.0;
+					var pann = 60;
+					if (camera.radius == 100) {
+						pann = 10;
+						oSc = 0.2;
+					} else if (camera.radius < 150) {
+						pann = 10;
+						oSc = 0.4;
+					} else if (camera.radius < 200) {
+						pann = 15;
+						oSc = 0.7;
+					} else if (camera.radius < 250) {
+						pann = 15;
+						oSc = 1.2;
+					} else if (camera.radius < 300) {
+						pann = 20;
+						oSc = 1.8;
+					} else if (camera.radius < 350) {
+						pann = 20;
+						oSc = 2.2;
+					} else if (camera.radius < 400) {
+						pann = 20;
+						oSc = 2.8;
+					} else if (camera.radius < 500) {
+						pann = 30;
+						oSc = 3.2;
+					} else if (camera.radius < 600) {
+						pann = 40;
+						oSc = 3.6;
+					} else if (camera.radius < 800) {
+						pann = 50;
+						oSc = 4.0;
+					} else {
+						pann = 60;
+						oSc = 5.0;
+					}
+					
+					if (light.shadowOrthoScale != oSc) {
+						camera.panningAxis = new BABYLON.Vector3(pann, 0, pann);
+						//light.shadowOrthoScale = oSc;
+					}
+					/*if (camera.radius < 200) {
+						shadowGenerator.bias = 0.0001;
+					} else {
+						shadowGenerator.bias = 0.001;
+					}*/
+					
+					if (Math.abs(prevCameraX - camera.getTarget()._x) > 50 || Math.abs(prevCameraZ - camera.getTarget()._z) > 50) {
+						//light.position = new BABYLON.Vector3(camera.getTarget()._x - 200, 40, camera.getTarget()._z - 200);
+						prevCameraX = camera.getTarget()._x;
+						prevCameraZ = camera.getTarget()._z;
+					}
+					var v0 = new BABYLON.Vector3(0, 0, 1);
+					var pos2 = camera.position;
+					
+					pos2._y = 0;
+					
+					var vv0 = camera.getDirection(BABYLON.Axis.Z);
+					vv0.y = 0;
+					vv0.normalize();
+					
+				});
+
+				return scene;
+			}
+			const scene = createScene(); //Call the createScene function
+			// Register a render loop to repeatedly render the scene
+			engine.runRenderLoop(function () {
+					scene.render();
+			});
+			// Watch for browser/canvas resize events
+			window.addEventListener("resize", function () {
+					engine.resize();
+			});
+			
+			var pickedX;
+			var pickedZ;
+			var at = 0;
+			var last = 0;
+			
+			var newItems = {};
+			
+			document.getElementById("print").addEventListener('click', function() {
+				var s = "";
+				for (var added_at in newItems) {
+				   s += newItems[added_at] + '';
+				}
+				console.log(s);
+			});
+			
+			document.getElementById("undo").addEventListener('click', function() {
+				if (newItems[at]) {
+					delete newItems[at];
+				}
+				scene.meshes.forEach(function(mesh) {
+					if (mesh.added_at == at) {
+						mesh.dispose();
+					}
+				});
+			});
+			
+			document.getElementById("add").addEventListener('click', function() {
+				at = (new Date()).getTime();
+				/*newItems[at] =
+`{
+	"file": "` + document.getElementById("name").value + `",
+	"dir": ` + parseInt(document.getElementById("degree").value) + `,
+	"size": 1,
+	"pos": {
+		"x": ` + pickedX + `,
+		"y": ` + parseFloat(document.getElementById("y").value) + `,
+		"z": ` + pickedZ + `
+	}
+},`;*/
+newItems[at] =
+`{
+	"file": "` + document.getElementById("name").value + `",
+	"dir": ` + parseInt(document.getElementById("degree").value) + `,
+	"pos": {
+		"x": ` + parseFloat(document.getElementById("x").value) + `,
+		"y": ` + parseFloat(document.getElementById("y").value) + `,
+		"z": ` + parseFloat(document.getElementById("z").value) + `
+	}
+},`;
+
+				if ((document.getElementById("name").value).length) {
+					BABYLON.SceneLoader.LoadAssetContainer("./plops/", document.getElementById("name").value + ".glb", scene, function (container) {
+						var meshes = container.meshes;
+						var materials = container.materials;
+						meshes[0].position = new BABYLON.Vector3(parseFloat(document.getElementById("x").value), parseFloat(document.getElementById("y").value), parseFloat(document.getElementById("z").value));
+						meshes[0].addRotation(0, BABYLON.Tools.ToRadians(parseInt(document.getElementById("degree").value)), 0);
+						for (var i = 0; i < materials.length; i++) {
+							let material = materials[i];
+							material.backFaceCulling = false;
+						}
+						
+						for (var i = 0; i < meshes.length; i++) {
+							let mesh = meshes[i];
+							mesh.renderGroupId = 4;
+							mesh.added_at = at;
+						}
+						container.addAllToScene();
+					});
+				}
+			});
+			}
+		};
+		xobj.send(null);
+    </script>
+    <form style="position:absolute;right:0;bottom:0">
+    </form>
+</body>
+</html>
